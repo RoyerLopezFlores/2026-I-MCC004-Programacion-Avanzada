@@ -58,6 +58,9 @@ double Promedio(double x0, double y0) {
 }
 
 // 13 Suarez Maciel Susana Isabel <susana.suarez.maciel@gmail.com>
+    int cuadrado(int x13){
+        return x13 * x13;
+    }
 
 // 14 Tellez Heredia Jhon <phyjhon@gmail.com>,
 

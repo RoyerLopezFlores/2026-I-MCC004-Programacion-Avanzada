@@ -31,7 +31,8 @@ unsigned int factorial(unsigned int number);
 double Promedio(double x0, double y0);
 
 // 13 Suarez Maciel Susana Isabel <susana.suarez.maciel@gmail.com>
-
+    int cuadrado(int x13);
+    
 // 14 Tellez Heredia Jhon <phyjhon@gmail.com>,
 
 // 15 Vilca Aguilar Luis Angel <luisangelvilca2@gmail.com>,

@@ -35,7 +35,7 @@ int main() {
     // Modulo
 
     // 7 DÍAZ VEGA OLENKA HELENE <olenka.diaz.v@uni.pe>
-
+    
     // 8 Gallo Lugo Carlos enrique <cgallolugo@gmail.com>
 
     // 9 Lopez Flores Royer Amed <roamlofl9@gmail.com>
@@ -61,7 +61,11 @@ int main() {
 
 
     // 13 Suarez Maciel Susana Isabel <susana.suarez.maciel@gmail.com>
+    int x13 = 8;
+    int result = cuadrado(x13);
 
+    cout << "Suarez Maciel Susana Isabel: El cuadrado de: " << x13 << " es " << result << endl;
+    
     // 14 Tellez Heredia Jhon <phyjhon@gmail.com>,
 
     // 15 Vilca Aguilar Luis Angel <luisangelvilca2@gmail.com>,
