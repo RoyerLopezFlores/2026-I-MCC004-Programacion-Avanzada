@@ -57,35 +57,41 @@ istream &Matrix1<T>::Read(istream &is) {
 template <typename T>
 template <typename Func, typename... Args>
 void Matrix1<T>::ApplyFunctionToAll(Func func, Args&& ...args) {
+    //if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
+    //    return;
+//
+    //const size_t workersCount = min(static_cast<size_t>(thread::hardware_concurrency() == 0 ? 2 : thread::hardware_concurrency()), m_rows);
+//
+    //mutex rowMutex;
+    //size_t nextRow = 0;
+    //vector<thread> workers;
+    //workers.reserve(workersCount);
+//
+    //for (size_t t = 0; t < workersCount; ++t) {
+    //    workers.emplace_back([&]() {
+    //        while (true) {
+    //            size_t row = 0;
+    //            {
+    //                scoped_lock lock(rowMutex);
+    //                if (nextRow >= m_rows)
+    //                    return;
+    //                row = nextRow++;
+    //            }
+//
+    //            for (size_t col = 0; col < m_cols; ++col)
+    //                func(m_pMat[row][col], args...);
+    //        }
+    //    });
+    //}
+//
+    //for (thread &worker : workers)
+    //    worker.join();
     if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return;
 
-    const size_t workersCount = min(static_cast<size_t>(thread::hardware_concurrency() == 0 ? 2 : thread::hardware_concurrency()), m_rows);
-
-    mutex rowMutex;
-    size_t nextRow = 0;
-    vector<thread> workers;
-    workers.reserve(workersCount);
-
-    for (size_t t = 0; t < workersCount; ++t) {
-        workers.emplace_back([&]() {
-            while (true) {
-                size_t row = 0;
-                {
-                    scoped_lock lock(rowMutex);
-                    if (nextRow >= m_rows)
-                        return;
-                    row = nextRow++;
-                }
-
-                for (size_t col = 0; col < m_cols; ++col)
-                    func(m_pMat[row][col], args...);
-            }
-        });
-    }
-
-    for (thread &worker : workers)
-        worker.join();
+    for (size_t row = 0; row < m_rows; ++row)
+        for (size_t col = 0; col < m_cols; ++col)
+            func(m_pMat[row][col], forward<Args>(args)...);
 }
 
 template <typename T>
