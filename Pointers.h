@@ -11,5 +11,6 @@ void DemoPointersVector5();
 void DemoPointersMatrix1();
 void DemoPointersMatrix2();
 void DemoPointersMatrix4();
+void DemoMatrixSimple();
 
 #endif // __POINTERS_H__

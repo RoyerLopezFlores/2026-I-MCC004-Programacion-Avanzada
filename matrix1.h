@@ -5,6 +5,7 @@
 #include <functional>
 #include <iostream>
 #include <mutex>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -12,7 +13,6 @@ using namespace std;
 
 template <typename T>
 void AddOne(T &n) { ++n; }
-
 template <typename T>
 class Matrix1 {
     private:
@@ -40,16 +40,40 @@ void Matrix1<T>::Create()
 template <typename T>
 istream &Matrix1<T>::Read(istream &is) {
     Destroy();
-    is >> m_rows >> m_cols;
-    if (!is || m_rows == 0 || m_cols == 0) {
+
+    size_t rows = 0, cols = 0;
+
+    string firstToken;
+    is >> firstToken;
+    if (!is) {
         m_rows = m_cols = 0;
         return is;
     }
 
+    if (firstToken != "MATRIZ:" && firstToken != "MATRIZ") {
+        m_rows = m_cols = 0;
+        is.setstate(ios::failbit);
+        return is;
+    }
+
+    is >> rows >> cols;
+
+    if (!is || rows == 0 || cols == 0) {
+        m_rows = m_cols = 0;
+        return is;
+    }
+
+    m_rows = rows;
+    m_cols = cols;
     Create();
-    for (size_t i = 0; i < m_rows; ++i)
-        for (size_t j = 0; j < m_cols; ++j)
-            is >> m_pMat[i][j];
+    for (size_t i = 0; i < m_rows; ++i) {
+        for (size_t j = 0; j < m_cols; ++j) {
+            if (!(is >> m_pMat[i][j])) {
+                Destroy();
+                return is;
+            }
+        }
+    }
 
     return is;
 }
@@ -96,6 +120,15 @@ void Matrix1<T>::ApplyFunctionToAll(Func func, Args&& ...args) {
 
 template <typename T>
 ostream &Matrix1<T>::Print(ostream &os) {
+    //os << m_rows << " " << m_cols << "\n";
+    //size_t count = 0;
+    //ApplyFunctionToAll([&](T &value) {
+    //    os << value << " ";
+    //    ++count;
+    //    if (count % m_cols == 0)
+    //        os << "\n";
+    //});
+    os<<"MATRIZ:\n";
     os << m_rows << " " << m_cols << "\n";
     for (size_t i = 0; i < m_rows; ++i) {
         for (size_t j = 0; j < m_cols; ++j)

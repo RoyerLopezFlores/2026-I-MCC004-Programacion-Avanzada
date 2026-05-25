@@ -1,5 +1,6 @@
 #include <iostream> // cout, cin, endl
 #include <fstream>  // ofstream
+#include <cstdio>
 #include <mutex>
 #include <sstream>
 #include "Pointers.h"
@@ -259,4 +260,34 @@ void DemoPointersMatrix4() {
     cout << "Matriz transformada (+1):\n";
     matrix.Print(cout);
     cout << "Suma concurrente: " << concurrentSum << endl;
+}
+
+void DemoMatrixSimple() {
+    const char *inputFile = "demo_matrix.txt";
+    const char *outputFile = "demo_matrix_out.txt";
+
+    {
+        ofstream createInput(inputFile);
+        createInput << "MATRIZ:\n";
+        createInput << "2 3\n";
+        createInput << "1 2 3\n";
+        createInput << "4 5 6\n";
+    }
+
+    Matrix1<TI> matrix;
+    ifstream ifs(inputFile);
+    if (!(ifs >> matrix)) {
+        cout << "No se pudo leer la matriz desde " << inputFile << endl;
+        return;
+    }
+
+    matrix.ApplyFunctionToAll(AddOne<TI>);
+
+    ofstream ofs(outputFile);
+    ofs << matrix;
+
+    remove(inputFile);
+
+    cout << "Matriz procesada guardada en " << outputFile << endl;
+    cout << "Archivo temporal eliminado: " << inputFile << endl;
 }
