@@ -91,7 +91,7 @@ void Matrix1<T>::ApplyFunctionToAll(Func func, Args&& ...args) {
 
     for (size_t row = 0; row < m_rows; ++row)
         for (size_t col = 0; col < m_cols; ++col)
-            func(m_pMat[row][col], forward<Args>(args)...);
+            func(m_pMat[row][col], args...);
 }
 
 template <typename T>
