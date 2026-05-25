@@ -1,4 +1,5 @@
 #include <cmath>
+#include <numbers>
 #include "circle.h"
 
 Circle::Circle(string name, ostream &os, Distance radius)
@@ -11,5 +12,5 @@ Circle::~Circle() {
 }
 
 Area Circle::GetArea() const {
-    return M_PI * m_radius * m_radius;
+    return std::numbers::pi_v<Area> * m_radius * m_radius;
 }
