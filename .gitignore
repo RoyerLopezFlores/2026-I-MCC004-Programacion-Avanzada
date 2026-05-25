@@ -42,3 +42,8 @@
 
 main
 *.txt
+
+Doxyfile    
+doc.md
+*.md
+/docs

@@ -1,11 +1,14 @@
 #include <iostream> // cout, cin, endl
 #include <fstream>  // ofstream
+#include <mutex>
+#include <sstream>
 #include "Pointers.h"
 #include "util.h"
 #include "array1.h"
 #include "array2.h"
 #include "array3.h"
 #include "array4.h"
+#include "matrix1.h"
 
 using namespace std;
 
@@ -227,4 +230,33 @@ void DemoPointersVector5(){
 }
 
 void DemoPointersMatrix1(){
+}
+
+void DemoPointersMatrix4() {
+    cout << "Nivel Matriz #4 (concurrencia + scoped_lock)\n";
+
+    Matrix1<TI> matrix;
+    ifstream ifs("entradas.txt");
+
+    if (ifs) {
+        matrix.Read(ifs);
+    } else {
+        istringstream iss("2 3 1 2 3 4 5 6");
+        matrix.Read(iss);
+    }
+
+    cout << "Matriz original:\n";
+    matrix.Print(cout);
+
+    mutex sumMutex;
+    TI concurrentSum = 0;
+    matrix.ApplyFunctionToAll([&](TI &n) {
+        AddOne(n);
+        scoped_lock lock(sumMutex);
+        concurrentSum += n;
+    });
+
+    cout << "Matriz transformada (+1):\n";
+    matrix.Print(cout);
+    cout << "Suma concurrente: " << concurrentSum << endl;
 }
