@@ -346,11 +346,15 @@ Matrix1<T> Matrix1<T>::operator+(const T &scalar) const {
     if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return Matrix1<T>();
 
-    Matrix1<T> result(m_rows, m_cols);
-    for (size_t i = 0; i < m_rows; ++i)
-        for (size_t j = 0; j < m_cols; ++j)
-            result.m_pMat[i][j] = m_pMat[i][j] + scalar;
+    //Matrix1<T> result(m_rows, m_cols);
 
+    //for (size_t i = 0; i < m_rows; ++i)
+    //    for (size_t j = 0; j < m_cols; ++j)
+    //        result.m_pMat[i][j] = m_pMat[i][j] + scalar;
+
+    Matrix1<T> result(*this);
+    result.ApplyFunctionToAll([scalar](T &elem) { elem += scalar; });
+    
     return result;
 }
 
