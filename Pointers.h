@@ -12,5 +12,7 @@ void DemoPointersMatrix1();
 void DemoPointersMatrix2();
 void DemoPointersMatrix4();
 void DemoMatrixSimple();
+void DemoMatrixMultiply();
+void DemoMatrixType1And2();
 
 #endif // __POINTERS_H__

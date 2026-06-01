@@ -13,6 +13,7 @@ SRCS = main.cpp util.cpp \
        polimorfismo.cpp \
        BitSigno.cpp \
        Pointers.cpp \
+       Matriz.cpp \
        array1.cpp
 
 OBJS = $(SRCS:.cpp=.o)

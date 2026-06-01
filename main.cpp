@@ -10,7 +10,7 @@
 
 using namespace std;
 
-// Ernesto Cuadros
+// Ernesto Cuadros-Vargas
 // g++ -std=c++2b main.cpp util.cpp -o main
 int main() {
     // DemoFunctions();
@@ -23,6 +23,8 @@ int main() {
     // DemoPointersVector3();
     // DemoPointersVector4();
     // DemoPointersVector5();
-    DemoMatrixSimple();
+    //DemoMatrixSimple();
+    //DemoMatrixMultiply();
+    DemoMatrixType1And2();
     return 0;
 }

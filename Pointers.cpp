@@ -291,3 +291,56 @@ void DemoMatrixSimple() {
     cout << "Matriz procesada guardada en " << outputFile << endl;
     cout << "Archivo temporal eliminado: " << inputFile << endl;
 }
+
+void DemoMatrixMultiply() {
+    istringstream aData(
+        "MATRIZ:\n"
+        "3 2\n"
+        "1 2\n"
+        "3 4\n"
+        "5 6\n"
+    );
+
+    istringstream bData(
+        "MATRIZ:\n"
+        "2 3\n"
+        "7 8 9\n"
+        "10 11 12\n"
+    );
+
+    istringstream cData(
+        "MATRIZ:\n"
+        "3 2\n"
+        "2 2\n"
+        "2 2\n"
+        "2 2\n"
+    );
+    istringstream dData(
+        "MATRIZ:\n"
+        "3 3\n"
+        "1 1 1\n"
+        "1 1 1\n"
+        "1 1 1\n"
+    );
+
+    Matrix1<TI> a, b, c,d;
+    if (!(aData >> a) || !(bData >> b) || !(cData >> c) || !(dData >> d)) {
+        cout << "Error leyendo matrices de ejemplo" << endl;
+        return;
+    }
+
+    try {
+        cout << "Matriz A:\n" << a;
+        cout << "Matriz B:\n" << b;
+        cout << "Matriz C:\n" << c;
+        cout << "Matriz D:\n" << d;
+        Matrix1<TI> linear = (a+a) * b*2 + 4 - d;
+        cout<<"Fin de la combinacion lineal\n";
+        Matrix1<TI> productElementWise = a.ElementWiseMultiply(c);
+        
+        cout << "Matriz combinacion lineal ((a+a) * b*2 + 4 - d) :\n" << linear;
+        cout << "A elemento a elemento C (3x2 y 3x2):\n" << productElementWise;
+    } catch (const exception &ex) {
+        cout << "Error en operaciones de matrices: " << ex.what() << endl;
+    }
+}
