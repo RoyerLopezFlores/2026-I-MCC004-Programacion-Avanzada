@@ -47,3 +47,6 @@ Doxyfile
 doc.md
 *.md
 /docs
+.vscode/
+build/
+matrix1.cp312-win_amd64.pyd
