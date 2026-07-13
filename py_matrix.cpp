@@ -7,12 +7,12 @@
 
 namespace py = pybind11;
 //using TD = double;
-using Matrix = Matrix1<TD>;
+//using Matrix = Matrix1<TD>;
 using py_ssize_t = py::ssize_t;
 using TIDX = size_t;
 template<typename TD>
 void bind_matrix(py::module_& m, const std::string& name){
-    using Matrix = Matrix1<T>;
+    using Matrix = Matrix1<TD>;
     py::class_<Matrix>(m, name.c_str(), py::buffer_protocol())
         .def(py::init<size_t, size_t>())
         .def(py::init<size_t, size_t, const TD &>())
