@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++2b -Wall -g -pthread  # Añadido -pthread
-LDFLAGS = -pthread # Añadido -pthread
+CXXFLAGS = -std=c++2b -Wall -g -pthread -DMATRIX1_DEBUG=0  # Añadido -pthread
+LDFLAGS = -pthread  # Añadido -pthread
 
 TARGET = main
 SRCS = main.cpp util.cpp \

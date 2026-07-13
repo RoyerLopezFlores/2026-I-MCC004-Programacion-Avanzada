@@ -6,12 +6,14 @@
 #include <pybind11/numpy.h>
 
 namespace py = pybind11;
-using TD = double;
+//using TD = double;
 using Matrix = Matrix1<TD>;
 using py_ssize_t = py::ssize_t;
 using TIDX = size_t;
-PYBIND11_MODULE(matrix1, m) {
-    py::class_<Matrix>(m, "Matrix1", py::buffer_protocol())
+template<typename TD>
+void bind_matrix(py::module_& m, const std::string& name){
+    using Matrix = Matrix1<T>;
+    py::class_<Matrix>(m, name.c_str(), py::buffer_protocol())
         .def(py::init<size_t, size_t>())
         .def(py::init<size_t, size_t, const TD &>())
         .def("rows", &Matrix::Rows)
@@ -111,13 +113,33 @@ PYBIND11_MODULE(matrix1, m) {
 
         .def(TD() + py::self)
         .def(TD() - py::self)
-        .def(TD() * py::self)
-
-        
-
-        ;
+        .def(TD() * py::self);
 
     // Convenience aliases to allow matrix1.zeros(...) and matrix1.ones(...)
     m.def("zeros", &Matrix::Zeros);
     m.def("ones", &Matrix::Ones);
+}
+
+
+PYBIND11_MODULE(matrix1,m)
+{
+
+    bind_matrix<int>(
+        m,
+        "MatrixInt"
+    );
+
+
+    bind_matrix<float>(
+        m,
+        "MatrixFloat"
+    );
+
+
+    bind_matrix<double>(
+        m,
+        "MatrixDouble"
+    );
+
+
 }

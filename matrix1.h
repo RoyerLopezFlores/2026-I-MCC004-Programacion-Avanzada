@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <functional>
 #include <iostream>
+#include <mutex>
+#include <shared_mutex>
 #include <stdexcept>
 #include <utility>
 
@@ -30,6 +32,13 @@ class Matrix1 {
     size_t m_rows = 0;
     size_t m_cols = 0;
     T *m_data = nullptr;
+        mutable shared_mutex m_rwMutex;
+
+        void CreateUnlocked();
+        void DestroyUnlocked();
+
+    template <typename Func, typename... Args>
+    void ApplyFunctionToAllPrivate(Func func, Args &&...args);
 
   public:
     Matrix1() { MATRIX1_TRACE("default constructor"); }
@@ -63,11 +72,30 @@ class Matrix1 {
     void Create();
     void Destroy();
 
-    size_t Rows() const { return m_rows; }
-    size_t Cols() const { return m_cols; }
+    size_t Rows() const {
+        shared_lock<shared_mutex> lock(m_rwMutex);
+        return m_rows;
+    }
+    size_t Cols() const {
+        shared_lock<shared_mutex> lock(m_rwMutex);
+        return m_cols;
+    }
 
-    T* Data() { return m_data; }
-    const T* Data() const { return m_data; }
+    T* Data() {
+        shared_lock<shared_mutex> lock(m_rwMutex);
+        return m_data;
+    }
+    const T* Data() const {
+        shared_lock<shared_mutex> lock(m_rwMutex);
+        return m_data;
+    }
+
+    T* begin() { return m_data; }
+    T* end() { return m_data + (m_rows * m_cols); }
+    const T* begin() const { return m_data; }
+    const T* end() const { return m_data + (m_rows * m_cols); }
+    const T* cbegin() const { return begin(); }
+    const T* cend() const { return end(); }
 
     istream &Read(istream &is);
 
@@ -100,6 +128,7 @@ class Matrix1 {
     Matrix1 &operator*=(const T &scalar);
 
     Matrix1 ElementWiseMultiply(const Matrix1 &other) const;
+    
 };
 
 template <typename T>
@@ -107,7 +136,7 @@ Matrix1<T>::Matrix1(size_t rows, size_t cols) : m_rows(rows), m_cols(cols) {
     MATRIX1_TRACE("constructor(size_t,size_t)");
     if (m_rows == 0 || m_cols == 0)
         throw invalid_argument("Dimensiones invalidas para Matrix1");
-    Create();
+    CreateUnlocked();
     //ApplyFunctionToAllDirect([&value](T &elem) { elem = value; });
 }
 template <typename T>
@@ -115,32 +144,38 @@ Matrix1<T>::Matrix1(size_t rows, size_t cols, const T &value) : m_rows(rows), m_
     MATRIX1_TRACE("constructor(size_t,size_t,const T&)");
     if (m_rows == 0 || m_cols == 0)
         throw invalid_argument("Dimensiones invalidas para Matrix1");
-    Create();
-    ApplyFunctionToAllDirect([&value](T &elem) { elem = value; });
+    CreateUnlocked();
+    ApplyFunctionToAllPrivate([&value](T &elem) { elem = value; });
     //std::fill(m_data, m_data + m_rows * m_cols, value);
 }
 
 template <typename T>
-Matrix1<T>::Matrix1(const Matrix1<T> &other) : m_rows(other.m_rows), m_cols(other.m_cols) {
+Matrix1<T>::Matrix1(const Matrix1<T> &other) {
     MATRIX1_TRACE("Copy constructor");
+    shared_lock<shared_mutex> lock(other.m_rwMutex);
+    m_rows = other.m_rows;
+    m_cols = other.m_cols;
     if (other.m_pMat == nullptr || m_rows == 0 || m_cols == 0) {
         m_pMat = nullptr;
+        m_data = nullptr;
         m_rows = m_cols = 0;
         return;
     }
 
-    Create();
+    CreateUnlocked();
     for (size_t i = 0; i < m_rows; ++i)
         for (size_t j = 0; j < m_cols; ++j)
             m_pMat[i][j] = other.m_pMat[i][j];
 }
 
 template <typename T>
-Matrix1<T>::Matrix1(Matrix1<T> &&other) noexcept
-        : m_pMat(exchange(other.m_pMat, nullptr)),
-      m_rows(exchange(other.m_rows, 0)),
-            m_cols(exchange(other.m_cols, 0)) {
-        MATRIX1_TRACE("Move constructor");
+Matrix1<T>::Matrix1(Matrix1<T> &&other) noexcept {
+    scoped_lock lock(other.m_rwMutex);
+    m_pMat = exchange(other.m_pMat, nullptr);
+    m_data = exchange(other.m_data, nullptr);
+    m_rows = exchange(other.m_rows, 0);
+    m_cols = exchange(other.m_cols, 0);
+    MATRIX1_TRACE("Move constructor");
 }
 
 template <typename T>
@@ -150,7 +185,9 @@ Matrix1<T> &Matrix1<T>::operator=(const Matrix1<T> &other) {
         return *this;
 
     Matrix1<T> temp(other);
+    scoped_lock lock(m_rwMutex);
     swap(m_pMat, temp.m_pMat);
+    swap(m_data, temp.m_data);
     swap(m_rows, temp.m_rows);
     swap(m_cols, temp.m_cols);
     return *this;
@@ -160,8 +197,10 @@ template <typename T>
 Matrix1<T> &Matrix1<T>::operator=(Matrix1<T> &&other) noexcept {
     MATRIX1_TRACE("Move assignment");
     if (this != &other) {
-        Destroy();
+        scoped_lock lock(m_rwMutex, other.m_rwMutex);
+        DestroyUnlocked();
         m_pMat = exchange(other.m_pMat, nullptr);
+        m_data = exchange(other.m_data, nullptr);
         m_rows = exchange(other.m_rows, 0);
         m_cols = exchange(other.m_cols, 0);
     }
@@ -170,6 +209,11 @@ Matrix1<T> &Matrix1<T>::operator=(Matrix1<T> &&other) noexcept {
 
 template <typename T>
 bool Matrix1<T>::operator==(const Matrix1<T> &other) const {
+    if (this == &other)
+        return true;
+
+    shared_lock<shared_mutex> lockThis(m_rwMutex);
+    shared_lock<shared_mutex> lockOther(other.m_rwMutex);
     if (m_rows != other.m_rows || m_cols != other.m_cols)
         return false;
 
@@ -187,6 +231,12 @@ bool Matrix1<T>::operator!=(const Matrix1<T> &other) const {
 
 template <typename T>
 void Matrix1<T>::Create() {
+    scoped_lock lock(m_rwMutex);
+    CreateUnlocked();
+}
+
+template <typename T>
+void Matrix1<T>::CreateUnlocked() {
     MATRIX1_TRACE("Create(" << m_rows << "," << m_cols << ")");
     assert(m_rows > 0 && m_cols > 0);
     
@@ -210,6 +260,12 @@ void Matrix1<T>::Create() {
 
 template <typename T>
 void Matrix1<T>::Destroy() {
+    scoped_lock lock(m_rwMutex);
+    DestroyUnlocked();
+}
+
+template <typename T>
+void Matrix1<T>::DestroyUnlocked() {
     MATRIX1_TRACE("Destroy(" << m_rows << "," << m_cols << ")");
     if (m_pMat != nullptr) {
         //for (size_t i = 0; i < m_rows; ++i)
@@ -228,7 +284,8 @@ void Matrix1<T>::Destroy() {
 template <typename T>
 istream &Matrix1<T>::Read(istream &is) {
     MATRIX1_TRACE("Read");
-    Destroy();
+    scoped_lock lock(m_rwMutex);
+    DestroyUnlocked();
 
     size_t rows = 0;
     size_t cols = 0;
@@ -254,12 +311,12 @@ istream &Matrix1<T>::Read(istream &is) {
 
     m_rows = rows;
     m_cols = cols;
-    Create();
+    CreateUnlocked();
 
     for (size_t i = 0; i < m_rows; ++i) {
         for (size_t j = 0; j < m_cols; ++j) {
             if (!(is >> m_pMat[i][j])) {
-                Destroy();
+                DestroyUnlocked();
                 return is;
             }
         }
@@ -270,27 +327,44 @@ istream &Matrix1<T>::Read(istream &is) {
 
 template <typename T>
 template <typename Func, typename... Args>
-void Matrix1<T>::ApplyFunctionToAll(Func func, Args &&...args) {
-    MATRIX1_TRACE("ApplyFunctionToAll");
+void Matrix1<T>::ApplyFunctionToAllPrivate(Func func, Args &&...args) {
+    MATRIX1_TRACE("ApplyFunctionToAllPrivate");
     if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return;
 
-    ApplyFunctionToAllDirect(func, forward<Args>(args)...);
+    for (size_t row = 0; row < m_rows; ++row)
+        for (size_t col = 0; col < m_cols; ++col)
+            func(m_pMat[row][col], forward<Args>(args)...);
+}
+
+template <typename T>
+template <typename Func, typename... Args>
+void Matrix1<T>::ApplyFunctionToAll(Func func, Args &&...args) {
+    MATRIX1_TRACE("ApplyFunctionToAll");
+    scoped_lock lock(m_rwMutex);
+    this->ApplyFunctionToAllPrivate(func, forward<Args>(args)...);
 }
 template <typename T>
 template <typename Func, typename... Args>
 void Matrix1<T>::ApplyFunctionToAllDirect(Func func, Args &&...args) {
     MATRIX1_TRACE("ApplyFunctionToAllDirect");
-
-    for (size_t row = 0; row < m_rows; ++row)
-        for (size_t col = 0; col < m_cols; ++col)
-            func(m_pMat[row][col], forward<Args>(args)...);
+    scoped_lock lock(m_rwMutex);
+    this->ApplyFunctionToAllPrivate(func, forward<Args>(args)...);
 }
 //template <typename T>
 template<typename T>
 template<typename Func, typename... Args>
 void Matrix1<T>::ApplyElementWise(const Matrix1<T> &other, Func func, Args &&...args) {
     MATRIX1_TRACE("ApplyElementWise");
+    if (this == &other) {
+        scoped_lock lock(m_rwMutex);
+        for (size_t row = 0; row < m_rows; ++row)
+            for (size_t col = 0; col < m_cols; ++col)
+                func(m_pMat[row][col], m_pMat[row][col], forward<Args>(args)...);
+        return;
+    }
+
+    scoped_lock lock(m_rwMutex, other.m_rwMutex);
     if (m_rows != other.m_rows || m_cols != other.m_cols)
         throw invalid_argument("Dimensiones distintas en ApplyElementWise");
 
@@ -302,6 +376,7 @@ void Matrix1<T>::ApplyElementWise(const Matrix1<T> &other, Func func, Args &&...
 template <typename T>
 ostream &Matrix1<T>::Print(ostream &os) const {
     MATRIX1_TRACE("Print");
+    shared_lock<shared_mutex> lock(m_rwMutex);
     os << "MATRIZ:\n";
     os << m_rows << " " << m_cols << "\n";
     for (size_t i = 0; i < m_rows; ++i) {
@@ -316,6 +391,7 @@ ostream &Matrix1<T>::Print(ostream &os) const {
 
 template <typename T>
 T *Matrix1<T>::operator[](size_t row) {
+    shared_lock<shared_mutex> lock(m_rwMutex);
     if (m_pMat == nullptr || row >= m_rows)
         throw out_of_range("Indice de fila fuera de rango");
     return m_pMat[row];
@@ -324,6 +400,7 @@ T *Matrix1<T>::operator[](size_t row) {
 
 template <typename T>
 const T *Matrix1<T>::operator[](size_t row) const {
+    shared_lock<shared_mutex> lock(m_rwMutex);
     if (m_pMat == nullptr || row >= m_rows)
         throw out_of_range("Indice de fila fuera de rango");
     return m_pMat[row];
@@ -333,28 +410,48 @@ const T *Matrix1<T>::operator[](size_t row) const {
 template <typename T>
 Matrix1<T> Matrix1<T>::operator+(const Matrix1<T> &other) const {
     MATRIX1_TRACE("+");
+    if (this == &other) {
+        shared_lock<shared_mutex> lock(m_rwMutex);
+        if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
+            return Matrix1<T>();
+
+        Matrix1<T> result(m_rows, m_cols);
+        for (size_t row = 0; row < m_rows; ++row)
+            for (size_t col = 0; col < m_cols; ++col)
+                result.m_pMat[row][col] = m_pMat[row][col] + m_pMat[row][col];
+        return result;
+    }
+
+    shared_lock<shared_mutex> lockThis(m_rwMutex);
+    shared_lock<shared_mutex> lockOther(other.m_rwMutex);
     if (m_rows != other.m_rows || m_cols != other.m_cols)
         throw invalid_argument("No se puede sumar: dimensiones distintas");
 
     if (m_pMat == nullptr || other.m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return Matrix1<T>();
 
-    //Matrix1<T> result(m_rows, m_cols);
-    //for (size_t i = 0; i < m_rows; ++i)
-    //    for (size_t j = 0; j < m_cols; ++j)
-    //        result.m_pMat[i][j] = m_pMat[i][j] + other.m_pMat[i][j];
-    //
-    //result.ApplyFunctionToAllDirect([&](T &elem, size_t row, size_t col) {
-    //    elem = m_pMat[row][col] + other.m_pMat[row][col];
-    //});
-    Matrix1<T> result(*this);
-    result += other;
+    Matrix1<T> result(m_rows, m_cols);
+    for (size_t row = 0; row < m_rows; ++row)
+        for (size_t col = 0; col < m_cols; ++col)
+            result.m_pMat[row][col] = m_pMat[row][col] + other.m_pMat[row][col];
     return result;
 }
 
 template <typename T>
 Matrix1<T> &Matrix1<T>::operator+=(const Matrix1<T> &other) {
     MATRIX1_TRACE("+=");
+    if (this == &other) {
+        scoped_lock lock(m_rwMutex);
+        if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
+            return *this;
+
+        for (size_t row = 0; row < m_rows; ++row)
+            for (size_t col = 0; col < m_cols; ++col)
+                m_pMat[row][col] = m_pMat[row][col] + m_pMat[row][col];
+        return *this;
+    }
+
+    scoped_lock lock(m_rwMutex, other.m_rwMutex);
     if (m_rows != other.m_rows || m_cols != other.m_cols)
         throw invalid_argument("No se puede sumar: dimensiones distintas");
 
@@ -366,9 +463,13 @@ Matrix1<T> &Matrix1<T>::operator+=(const Matrix1<T> &other) {
     //        m_pMat[i][j] += other.m_pMat[i][j];
 
     
-    ApplyElementWise(other, [](T &elem, const T &otherElem) {
+    for (size_t row = 0; row < m_rows; ++row)
+        for (size_t col = 0; col < m_cols; ++col)
+            m_pMat[row][col] = m_pMat[row][col] + other.m_pMat[row][col];
+
+    /*ApplyElementWise(other, [](T &elem, const T &otherElem) {
         elem = elem + otherElem;
-    });
+    });*/
 
     return *this;
 }
@@ -376,17 +477,27 @@ Matrix1<T> &Matrix1<T>::operator+=(const Matrix1<T> &other) {
 template <typename T>
 Matrix1<T> Matrix1<T>::operator-(const Matrix1<T> &other) const {
     MATRIX1_TRACE("-");
+    if (this == &other) {
+        shared_lock<shared_mutex> lock(m_rwMutex);
+        if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
+            return Matrix1<T>();
+
+        Matrix1<T> result(m_rows, m_cols, T{});
+        return result;
+    }
+
+    shared_lock<shared_mutex> lockThis(m_rwMutex);
+    shared_lock<shared_mutex> lockOther(other.m_rwMutex);
     if (m_rows != other.m_rows || m_cols != other.m_cols)
         throw invalid_argument("No se puede restar: dimensiones distintas");
 
     if (m_pMat == nullptr || other.m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return Matrix1<T>();
 
-    Matrix1<T> result(*this);
-    //for (size_t i = 0; i < m_rows; ++i)
-    //    for (size_t j = 0; j < m_cols; ++j)
-    //        result.m_pMat[i][j] = m_pMat[i][j] - other.m_pMat[i][j];
-    result-= other;
+    Matrix1<T> result(m_rows, m_cols);
+    for (size_t row = 0; row < m_rows; ++row)
+        for (size_t col = 0; col < m_cols; ++col)
+            result.m_pMat[row][col] = m_pMat[row][col] - other.m_pMat[row][col];
 
     return result;
 }
@@ -394,6 +505,18 @@ Matrix1<T> Matrix1<T>::operator-(const Matrix1<T> &other) const {
 template <typename T>
 Matrix1<T> &Matrix1<T>::operator-=(const Matrix1<T> &other) {
     MATRIX1_TRACE("-=");
+    if (this == &other) {
+        scoped_lock lock(m_rwMutex);
+        if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
+            return *this;
+
+        for (size_t row = 0; row < m_rows; ++row)
+            for (size_t col = 0; col < m_cols; ++col)
+                m_pMat[row][col] = T{};
+        return *this;
+    }
+
+    scoped_lock lock(m_rwMutex, other.m_rwMutex);
     if (m_rows != other.m_rows || m_cols != other.m_cols)
         throw invalid_argument("No se puede restar: dimensiones distintas");
 
@@ -403,15 +526,36 @@ Matrix1<T> &Matrix1<T>::operator-=(const Matrix1<T> &other) {
     //for (size_t i = 0; i < m_rows; ++i)
     //    for (size_t j = 0; j < m_cols; ++j)
     //        m_pMat[i][j] -= other.m_pMat[i][j];
-    ApplyElementWise(other, [](T &elem, const T &otherElem) {
-        elem = elem - otherElem;
-    });
+    for (size_t row = 0; row < m_rows; ++row)
+        for (size_t col = 0; col < m_cols; ++col)
+            m_pMat[row][col] = m_pMat[row][col] - other.m_pMat[row][col];
     return *this;
 }
 
 template <typename T>
 Matrix1<T> Matrix1<T>::operator*(const Matrix1<T> &other) const {
     MATRIX1_TRACE("*");
+    if (this == &other) {
+        shared_lock<shared_mutex> lock(m_rwMutex);
+        if (m_cols != m_rows)
+            throw invalid_argument("No se puede multiplicar: columnas(A) != filas(B)");
+
+        if (m_rows == 0 || m_cols == 0)
+            return Matrix1<T>();
+
+        Matrix1<T> result(m_rows, m_cols);
+        for (size_t i = 0; i < result.m_rows; ++i) {
+            for (size_t j = 0; j < result.m_cols; ++j) {
+                result.m_pMat[i][j] = T{};
+                for (size_t k = 0; k < m_cols; ++k)
+                    result.m_pMat[i][j] += m_pMat[i][k] * m_pMat[k][j];
+            }
+        }
+        return result;
+    }
+
+    shared_lock<shared_mutex> lockThis(m_rwMutex);
+    shared_lock<shared_mutex> lockOther(other.m_rwMutex);
     if (m_cols != other.m_rows)
         throw invalid_argument("No se puede multiplicar: columnas(A) != filas(B)");
 
@@ -436,11 +580,38 @@ Matrix1<T> Matrix1<T>::operator*(const Matrix1<T> &other) const {
 template <typename T>
 Matrix1<T> &Matrix1<T>::operator*=(const Matrix1<T> &other) {
     MATRIX1_TRACE("*=");
+    if (this == &other) {
+        scoped_lock lock(m_rwMutex);
+        if (m_cols != m_rows)
+            throw invalid_argument("No se puede multiplicar: columnas(A) != filas(B)");
+
+        if (m_rows == 0 || m_cols == 0 || m_pMat == nullptr) {
+            DestroyUnlocked();
+            return *this;
+        }
+
+        Matrix1<T> result(m_rows, m_cols);
+        for (size_t i = 0; i < result.m_rows; ++i) {
+            for (size_t j = 0; j < result.m_cols; ++j) {
+                result.m_pMat[i][j] = T{};
+                for (size_t k = 0; k < m_cols; ++k)
+                    result.m_pMat[i][j] += m_pMat[i][k] * m_pMat[k][j];
+            }
+        }
+
+        swap(m_pMat, result.m_pMat);
+        swap(m_data, result.m_data);
+        swap(m_rows, result.m_rows);
+        swap(m_cols, result.m_cols);
+        return *this;
+    }
+
+    scoped_lock lock(m_rwMutex, other.m_rwMutex);
     if (m_cols != other.m_rows)
         throw invalid_argument("No se puede multiplicar: columnas(A) != filas(B)");
 
     if (m_rows == 0 || m_cols == 0 || other.m_cols == 0 || m_pMat == nullptr || other.m_pMat == nullptr) {
-        Destroy();
+        DestroyUnlocked();
         return *this;
     }
 
@@ -455,50 +626,55 @@ Matrix1<T> &Matrix1<T>::operator*=(const Matrix1<T> &other) {
     //    }
     //}
     //*this = move(result);
-    *this = (*this) * other;
+    Matrix1<T> result(m_rows, other.m_cols);
+    for (size_t i = 0; i < result.m_rows; ++i) {
+        for (size_t j = 0; j < result.m_cols; ++j) {
+            result.m_pMat[i][j] = T{};
+            for (size_t k = 0; k < m_cols; ++k)
+                result.m_pMat[i][j] += m_pMat[i][k] * other.m_pMat[k][j];
+        }
+    }
+
+    swap(m_pMat, result.m_pMat);
+    swap(m_data, result.m_data);
+    swap(m_rows, result.m_rows);
+    swap(m_cols, result.m_cols);
     return *this;
 }
 
 template <typename T>
 Matrix1<T> Matrix1<T>::operator+(const T &scalar) const {
     MATRIX1_TRACE("+s");
+    shared_lock<shared_mutex> lock(m_rwMutex);
     if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return Matrix1<T>();
 
-    //Matrix1<T> result(m_rows, m_cols);
-
-    //for (size_t i = 0; i < m_rows; ++i)
-    //    for (size_t j = 0; j < m_cols; ++j)
-    //        result.m_pMat[i][j] = m_pMat[i][j] + scalar;
-
-    Matrix1<T> result(*this);
-    //result.ApplyFunctionToAllDirect([scalar](T &elem) { elem += scalar; });
-    result += scalar;
+    Matrix1<T> result(m_rows, m_cols);
+    for (size_t i = 0; i < m_rows; ++i)
+        for (size_t j = 0; j < m_cols; ++j)
+            result.m_pMat[i][j] = m_pMat[i][j] + scalar;
     return result;
 }
 
 template <typename T>
 Matrix1<T> &Matrix1<T>::operator+=(const T &scalar) {
     MATRIX1_TRACE("+=s");
-    if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
-        return *this;
-
-    //for (size_t i = 0; i < m_rows; ++i)
-    //    for (size_t j = 0; j < m_cols; ++j)
-    //        m_pMat[i][j] += scalar;
-    ApplyFunctionToAllDirect([&scalar](T &elem) { elem += scalar; });
+    scoped_lock lock(m_rwMutex);
+    this->ApplyFunctionToAllPrivate([&scalar](T &elem) { elem += scalar; });
     return *this;
 }
 
 template <typename T>
 Matrix1<T> Matrix1<T>::operator-(const T &scalar) const {
     MATRIX1_TRACE("-s");
+    shared_lock<shared_mutex> lock(m_rwMutex);
     if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return Matrix1<T>();
 
-    Matrix1<T> result(*this);
-    result -= scalar;
-    
+    Matrix1<T> result(m_rows, m_cols);
+    for (size_t i = 0; i < m_rows; ++i)
+        for (size_t j = 0; j < m_cols; ++j)
+            result.m_pMat[i][j] = m_pMat[i][j] - scalar;
 
     return result;
 }
@@ -506,25 +682,22 @@ Matrix1<T> Matrix1<T>::operator-(const T &scalar) const {
 template <typename T>
 Matrix1<T> &Matrix1<T>::operator-=(const T &scalar) {
     MATRIX1_TRACE("-=s");
-    if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
-        return *this;
-    ApplyFunctionToAllDirect([&scalar](T &elem) { elem -= scalar; });
+    scoped_lock lock(m_rwMutex);
+    this->ApplyFunctionToAllPrivate([&scalar](T &elem) { elem -= scalar; });
     return *this;
 }
 
 template <typename T>
 Matrix1<T> Matrix1<T>::operator*(const T &scalar) const {
     MATRIX1_TRACE("*s");
+    shared_lock<shared_mutex> lock(m_rwMutex);
     if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return Matrix1<T>();
 
-    //Matrix1<T> result(m_rows, m_cols);
-    //for (size_t i = 0; i < m_rows; ++i)
-    //    for (size_t j = 0; j < m_cols; ++j)
-    //        result.m_pMat[i][j] = scalar * m_pMat[i][j];
-
-    Matrix1<T> result(*this);
-    result *= scalar;
+    Matrix1<T> result(m_rows, m_cols);
+    for (size_t i = 0; i < m_rows; ++i)
+        for (size_t j = 0; j < m_cols; ++j)
+            result.m_pMat[i][j] = m_pMat[i][j] * scalar;
 
     return result;
 }
@@ -532,29 +705,38 @@ Matrix1<T> Matrix1<T>::operator*(const T &scalar) const {
 template <typename T>
 Matrix1<T> &Matrix1<T>::operator*=(const T &scalar) {
     MATRIX1_TRACE("*=s");
-    if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
-        return *this;
-
-    ApplyFunctionToAllDirect([&scalar](T &elem) { elem *= scalar; });
+    scoped_lock lock(m_rwMutex);
+    this->ApplyFunctionToAllPrivate([&scalar](T &elem) { elem *= scalar; });
     return *this;
 }
 
 template <typename T>
 Matrix1<T> Matrix1<T>::ElementWiseMultiply(const Matrix1<T> &other) const {
     MATRIX1_TRACE("*ee");
+    if (this == &other) {
+        shared_lock<shared_mutex> lock(m_rwMutex);
+        if (m_pMat == nullptr || m_rows == 0 || m_cols == 0)
+            return Matrix1<T>();
+
+        Matrix1<T> result(m_rows, m_cols);
+        for (size_t row = 0; row < m_rows; ++row)
+            for (size_t col = 0; col < m_cols; ++col)
+                result.m_pMat[row][col] = m_pMat[row][col] * m_pMat[row][col];
+        return result;
+    }
+
+    shared_lock<shared_mutex> lockThis(m_rwMutex);
+    shared_lock<shared_mutex> lockOther(other.m_rwMutex);
     if (m_rows != other.m_rows || m_cols != other.m_cols)
         throw invalid_argument("No se puede multiplicar elemento a elemento: dimensiones distintas");
 
     if (m_pMat == nullptr || other.m_pMat == nullptr || m_rows == 0 || m_cols == 0)
         return Matrix1<T>();
 
-    Matrix1<T> result(*this);
-    //for (size_t i = 0; i < m_rows; ++i)
-    //    for (size_t j = 0; j < m_cols; ++j)
-    //        result.m_pMat[i][j] = m_pMat[i][j] * other.m_pMat[i][j];
-    result.ApplyElementWise(other, [](T &elem, const T &otherElem) {
-        elem = elem * otherElem;
-    });
+    Matrix1<T> result(m_rows, m_cols);
+    for (size_t row = 0; row < m_rows; ++row)
+        for (size_t col = 0; col < m_cols; ++col)
+            result.m_pMat[row][col] = m_pMat[row][col] * other.m_pMat[row][col];
     return result;
 }
 
