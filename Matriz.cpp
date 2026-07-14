@@ -129,7 +129,7 @@ void DemoMatrixType1And2() {
     );
 
     Matrix1<TI> a1, b1, d1;
-    Matrix2<TI> a2, b2, d2;
+    Matrix1<TI> a2, b2, d2;
 
     if (!(aData >> a1) || !(bData >> b1) || !(dData >> d1)) {
         cout << "Error leyendo matrices para Matrix1\n";
@@ -177,18 +177,15 @@ void DemoMatrixType1And2() {
         cout << "A * B:\n" << mul1;
         cout << "(A+A)*B*2 + 4 - D:\n" << lin1;
 
+        
+        Matrix1<TI> sum2 = a2 + b2;
+        Matrix1<TI> sub2 = a2 - b2;
         cout << "\n[Matrix2]\n";
-        Matrix2<TI> sum2 = a2 + b2;
-        Matrix2<TI> sub2 = a2 - b2;
-        Matrix2<TI> mul2;
-        const int iterations = kBenchmarkIterations;
-        const double avgMul2TimeUs = MeasureAverageTimeMicroseconds([&]() {
-            mul2 = a2 * b2;
-        }, iterations);
-        cout << "Promedio de tiempo A2 * B2 (" << iterations << " iteraciones): "
-             << avgMul2TimeUs << " us\n";
-        Matrix2<TI> lin2 = (a2 + a2) * b2 * 2 + 4 - d2;
-
+        
+        
+        Matrix1<TI> mul2 = a1 * b1;
+        Matrix1<TI> lin2 = (a2 + a2) * b2 * 2 + 4 - d2;
+        
         cout << "A + B:\n" << sum2;
         cout << "A - B:\n" << sub2;
         cout << "A * B:\n" << mul2;
@@ -212,6 +209,18 @@ void DemoMatrixType1And2() {
     }
 
     DemoApplyFunctionBenchmarks();
+    const int iterations = kBenchmarkIterations;
+    const TI dim = 1024;
+    Matrix1<TI> mul1t(dim, dim, 0);
+        Matrix1<TI> mul2t(dim, dim, 0);
+        Matrix1<TI> mul3t(dim, dim);
+        cout << "Matrices grandes:\n";
+        const double avgMul2TimeUs = MeasureAverageTimeMicroseconds([&mul1t, &mul2t, &mul3t]() {
+            mul3t = mul1t * mul2t;
+            //Promedio de tiempo A2 * B2 (10 iteraciones): 3.4994e+06 us
+        }, iterations);
+        cout << "Promedio de tiempo A2 * B2 (" << iterations << " iteraciones): "
+             << avgMul2TimeUs << " us\n";
     /*
     Benchmark ApplyFunctionToAll vs for_each
     ApplyFunctionToAll promedio (10 iteraciones): 90976.8 us

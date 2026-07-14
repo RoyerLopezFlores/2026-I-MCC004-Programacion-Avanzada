@@ -123,3 +123,14 @@ int main() {
 
     return 0;
 }
+/*
+Calculando promedio de 10 ejecuciones en GPU...
+
+================ RESULTADOS ================
+Dimensiones de A: 1024 x 1024
+Dimensiones de B: 1024 x 1024
+Tiempo Total (10 iteraciones): 84.4866 ms
+Tiempo Promedio por multiplicaci├│n: 8.44866 ms
+============================================
+
+*/
