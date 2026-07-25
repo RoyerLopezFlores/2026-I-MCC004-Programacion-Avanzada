@@ -7,15 +7,17 @@
 #include <memory>
 #include <new>
 #include <vector>
-
+#include <chrono>
 #if defined(_MSC_VER) || defined(__MINGW32__)
 #include <malloc.h>
 #endif
 using TF = float;
 using TD = double;
 using TI = int;
+using TC = char;
 using TIDX = std::size_t;
 using LTV = std::size_t;
+using TSIZE = std::size_t;
 using TBYTE = unsigned char;
 #define BLOCK_FULL static_cast<char>(219)
 #define BLOCK_EMPTY static_cast<char>(176)
@@ -35,7 +37,7 @@ namespace {
     LTV g_bytesRequested = 0;
     bool g_forceFail = false;
 
-    void printHeader(const char* title) {
+    void printHeader(const TC* title) {
         std::cout << "\n=== " << title << " ===\n";
     }
 
@@ -203,7 +205,7 @@ void operator delete(void* ptr, std::align_val_t) noexcept {
 	rawAlignedFree(ptr);
 }
 
-void* operator new(LTV size, const char* file, int line) {
+void* operator new(LTV size, const TC* file, int line) {
 	void* ptr = ::operator new(size);
     // Es bajo nivel, por lo que usamos fprintf para imprimir en stderr
     // duda duda por que tambien malloc es bajo nivel.
@@ -211,18 +213,18 @@ void* operator new(LTV size, const char* file, int line) {
 	return ptr;
 }
 
-void* operator new[](LTV size, const char* file, int line) {
+void* operator new[](LTV size, const TC* file, TI line) {
 	void* ptr = ::operator new[](size);
     // stderr = std::cerr, stdout = std::cout
 	std::fprintf(stderr, "[DBG_NEW[]] %s:%d -> %zu bytes @ %p\n", file, line, size, ptr);
 	return ptr;
 }
 
-void operator delete(void* ptr, const char*, int) noexcept {
+void operator delete(void* ptr, const TC*, TI) noexcept {
 	::operator delete(ptr);
 }
 
-void operator delete[](void* ptr, const char*, int) noexcept {
+void operator delete[](void* ptr, const TC*, TI) noexcept {
 	::operator delete[](ptr);
 }
 
@@ -434,7 +436,7 @@ public:
 	}
 
 private:
-	static constexpr LTV kBlocks = 256;
+	static constexpr LTV kBlocks = 1024;
 	alignas(std::max_align_t) unsigned char blocks_[kBlocks][32] = {};
 	bool free_[kBlocks] = {};
 };
@@ -453,6 +455,11 @@ struct TinyNode {
 	static void operator delete(void* ptr) noexcept {
 		alloc.deallocate(ptr);
 	}
+};
+
+template <typename T>
+struct NodeWO {
+	T v = 0;
 };
 
 class FrameAllocator {
@@ -645,14 +652,29 @@ void demo6_specificRegion() {
 
 void demo7_manySmallAllocations() {
 	printHeader("7) Optimizar muchas reservas pequenas");
-	TinyNode<TI>* nodes[100] = {};
-	for (int i = 0; i < 100; ++i) {
+	const TI tamNodes = 1000;
+	auto start_time = std::chrono::high_resolution_clock::now();
+	TinyNode<TI>* nodes[tamNodes] = {};
+	for (int i = 0; i < tamNodes; ++i) {
 		nodes[i] = new TinyNode<TI>();
 		nodes[i]->v = i;
 	}
-	std::cout << "TinyNode[99]=" << nodes[99]->v << " (sin malloc por nodo)\n";
-	for (int i = 0; i < 100; ++i) {
+	auto end_time = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double, std::milli> elapsed = end_time - start_time;
+	std::cout<< elapsed.count() << " ms para crear " << tamNodes << " TinyNode\n";
+	auto start_time_wo = std::chrono::high_resolution_clock::now();
+	NodeWO<TI>* nodesWO[tamNodes] = {};
+	for (int i = 0; i < tamNodes; ++i) {
+		nodesWO[i] = new NodeWO<TI>();
+		nodesWO[i]->v = i;
+	}
+	auto end_time_wo = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double, std::milli> elapsed_wo = end_time_wo - start_time_wo;
+	std::cout<< elapsed_wo.count() << " ms para crear " << tamNodes << " NodeWO\n";
+	std::cout << "TinyNode[99]=" << nodes[tamNodes - 1]->v << " (sin malloc por nodo)\n";
+	for (int i = 0; i < tamNodes; ++i) {
 		delete nodes[i];
+		delete nodesWO[i];
 	}
 }
 
