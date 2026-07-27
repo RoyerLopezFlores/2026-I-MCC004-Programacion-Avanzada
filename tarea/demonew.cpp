@@ -69,7 +69,7 @@ namespace {
         }
     }
 
-    void reportLeaks() {
+    void reportLeaks(std::ostream& os = std::cout) {
         LTV leakCount = 0;
         LTV leakBytes = 0;
         for (TIDX i = 0; i < kMaxRecords; ++i) {
@@ -79,10 +79,10 @@ namespace {
             }
         }
         if (leakCount == 0) {
-            std::cout << "Leak report: sin fugas detectadas\n";
+            os << "Leak report: sin fugas detectadas\n";
         } else {
-            std::cout << "Leak report: " << leakCount
-                    << " bloque(s), " << leakBytes << " bytes\n";
+            os << "Leak report: " << leakCount
+               << " bloque(s), " << leakBytes << " bytes\n";
         }
     }
 
@@ -180,7 +180,7 @@ void* operator new[](LTV size, const std::nothrow_t&) noexcept {
 void operator delete[](void* ptr, const std::nothrow_t&) noexcept {
 	::operator delete[](ptr);
 }
-
+/* Solo es para el trace*/
 void* operator new(LTV size, std::align_val_t align) {
 	const LTV alignment = static_cast<LTV>(align);
 	if (g_forceFail) {
